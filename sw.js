@@ -1,6 +1,6 @@
-// Benedita Studio 3D — PWA v1.8
+// Benedita Studio 3D — PWA v2.1
 // Conteúdo estático; dados pessoais ficam no IndexedDB do navegador.
-const CACHE = 'benedita-central-v18';
+const CACHE = 'benedita-central-v21';
 const PREFIX = 'benedita-central-';
 const PRELOAD = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './mascote-benedita.webp'];
 

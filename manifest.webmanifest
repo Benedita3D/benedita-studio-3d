@@ -1,7 +1,7 @@
 {
   "name": "Benedita Studio 3D — Central de Ferramentas",
   "short_name": "Benedita 3D",
-  "description": "Central Benedita Studio 3D v1.8: oito ferramentas, mascote e suporte a instalação e uso offline.",
+  "description": "Central Benedita Studio 3D v2.1: dez ferramentas, mascote e suporte a instalação e uso offline. Pedidos com impressão A4 e filamentos em kg.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
