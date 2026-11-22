@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>Benedita Studio 3D — Recuperação de senha v2.2</title>
+<style>
+:root{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#18304c;background:#edf2f7}
+*{box-sizing:border-box}
+body{margin:0;padding:20px}
+main{max-width:660px;margin:auto}
+header{background:#172b45;color:#fff;border-radius:17px;padding:22px;display:flex;align-items:center;gap:14px}
+header img{width:68px;height:68px;object-fit:cover;border-radius:14px}
+h1{font-size:1.34rem;margin:0}h2{font-size:1.13rem;margin:0 0 12px}
+p{margin:9px 0 14px}
+.subtitle{font-size:.88rem;color:#cbdbee}
+section{margin:16px 0;background:#fff;border:1px solid #d9e3ee;border-radius:16px;padding:23px;box-shadow:0 2px 9px #142b4710}
+label{font-weight:650;display:block;margin:14px 0 5px}
+input{width:100%;padding:12px;border:1px solid #bacbda;border-radius:9px;font:inherit;min-height:46px}
+input:focus,button:focus-visible{outline:3px solid #f1bf6f;outline-offset:2px}
+button{border:0;background:#173657;color:#fff;padding:12px 17px;border-radius:9px;font:inherit;font-weight:700;cursor:pointer;min-height:45px}
+button:disabled{opacity:.55;cursor:not-allowed}
+.msg{background:#eef3f9;padding:12px;border-radius:10px;margin-top:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.ok{background:#e4f5eb;color:#18513b}.msg.err{background:#fae9e8;color:#862f29}
+.small,footer{font-size:.87rem;color:#596d82}
+a{color:#145f9c}
+footer{text-align:center;padding:4px 12px 28px}
+[hidden]{display:none!important}
+</style>
+<script src="./sync-config-v22.js"></script>
+</head>
+<body>
+<main>
+<header><img src="./icon-192.png" alt="Mascote da Benedita Studio 3D"><div><h1>Benedita Studio 3D</h1><div class="subtitle">Recuperar acesso · versão de testes 2.2</div></div></header>
+<section id="ask-panel" hidden>
+<h2>Solicitar redefinição de senha</h2>
+<p>Informe o e-mail do usuário que já foi criado no Supabase. Enviaremos um link para você definir uma senha nova.</p>
+<form id="recover-form">
+<label for="email">E-mail da conta Benedita</label>
+<input id="email" type="email" autocomplete="email" required placeholder="seuemail@exemplo.com">
+<p><button id="recover-button" type="submit">Enviar link de recuperação</button></p>
+</form>
+<p class="small">Confira sua caixa de entrada e a pasta de spam. Se receber uma mensagem, abra o link pelo Chrome, sem compartilhá-lo.</p>
+</section>
+<section id="reset-panel" hidden>
+<h2>Definir sua nova senha</h2>
+<p>Link de recuperação reconhecido. Escolha uma senha nova e exclusiva para a Central.</p>
+<form id="reset-form">
+<label for="new-pass">Nova senha (mínimo de 12 caracteres)</label>
+<input id="new-pass" type="password" autocomplete="new-password" required minlength="12">
+<label for="confirm-pass">Repita a nova senha</label>
+<input id="confirm-pass" type="password" autocomplete="new-password" required minlength="12">
+<p><button id="reset-button" type="submit">Salvar nova senha</button></p>
+</form>
+</section>
+<section>
+<p class="msg" id="status" role="status" aria-live="polite">Verificando configuração…</p>
+<p class="small">Este é um teste separado. Nenhuma informação da Central v2.1 será alterada. Sua senha não será salva nesta página e não deve ser enviada por mensagem ou foto.</p>
+<p><a href="./teste-sync-v22.html">Abrir página de teste de login da v2.2</a></p>
+</section>
+<footer>Ambiente de testes · Benedita Studio 3D · Acesso pelo Supabase</footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const config = window.BENEDITA_SYNC_CONFIG || {};
+  const base = String(config.supabaseUrl || '').trim().replace(/\/+$/, '');
+  const apiKey = String(config.publishableKey || '').trim();
+  const configValid = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(base) &&
+    (apiKey.startsWith('sb_publishable_') || apiKey.startsWith('eyJ'));
+  const locationIsPublished = location.protocol === 'https:' && location.hostname === 'benedita3d.github.io';
+  const callback = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const query = new URLSearchParams(location.search);
+  const recoveryError = callback.get('error_description') || query.get('error_description') ||
+    callback.get('error') || query.get('error');
+  let recoveryToken = callback.get('access_token') || query.get('access_token') || '';
+  const callbackType = callback.get('type') || query.get('type') || '';
+  const callbackCode = query.get('code') || callback.get('code');
+  // Remove tokens from the address bar before any interaction or navigation.
+  if (location.hash || location.search) {
+    try { history.replaceState(null, '', location.pathname); } catch (_) { /* no-op */ }
+  }
+  function status(message, tone='') {
+    $('status').textContent = message;
+    $('status').className = 'msg' + (tone ? ' ' + tone : '');
+  }
+  function disabled(flag) {
+    document.querySelectorAll('button').forEach(btn => { btn.disabled = flag; });
+  }
+  async function request(path, method, payload, bearer='') {
+    const headers = {apikey: apiKey, 'Content-Type':'application/json'};
+    if (bearer) headers.Authorization = 'Bearer ' + bearer;
+    const response = await fetch(base + path, {
+      method, headers, body: JSON.stringify(payload), cache: 'no-store', referrerPolicy: 'no-referrer'
+    });
+    let reply = {};
+    try { reply = await response.json(); } catch (_) { /* no-op */ }
+    if (!response.ok) {
+      const msg = String(reply.msg || reply.message || reply.error_description || reply.error || 'Solicitação recusada');
+      throw new Error('HTTP ' + response.status + ': ' + msg.slice(0, 160));
+    }
+    return reply;
+  }
+  function errorMessage(err) {
+    const msg = String(err?.message || 'Erro inesperado');
+    if (/Failed to fetch|NetworkError|network error|fetch failed/i.test(msg)) {
+      return 'Não foi possível acessar o Supabase. Verifique a internet e o endereço do projeto.';
+    }
+    if (/429|rate limit/i.test(msg)) return 'Muitas tentativas. Confira seu e-mail e tente mais tarde.';
+    if (/expired|invalid.*token|403|401/i.test(msg)) return 'O link de recuperação expirou ou não é válido. Solicite outro link.';
+    return msg.slice(0, 200);
+  }
+  if (!locationIsPublished) {
+    status('Abra esta página pelo endereço oficial da Benedita no GitHub Pages. Não use o arquivo salvo em Downloads.', 'err');
+    return;
+  }
+  if (!configValid) {
+    status('Arquivo de conexão não encontrado ou incompleto. Confira sync-config-v22.js no GitHub.', 'err');
+    return;
+  }
+  if (recoveryError) {
+    $('ask-panel').hidden = false;
+    status('Este link de recuperação foi recusado ou expirou. Solicite um novo e-mail.', 'err');
+  } else if (recoveryToken && callbackType === 'recovery') {
+    $('reset-panel').hidden = false;
+    status('Link de recuperação recebido. Digite e confirme a nova senha.', 'ok');
+  } else if (callbackCode) {
+    $('ask-panel').hidden = false;
+    status('O link retornou um código que esta página de teste não consegue validar. Não compartilhe o código; solicite outro link e informe apenas esta mensagem.', 'err');
+  } else {
+    $('ask-panel').hidden = false;
+    status('Conexão configurada. Você pode solicitar um link de recuperação.');
+  }
+  $('recover-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const email = $('email').value.trim();
+    if (!email) return;
+    disabled(true);status('Enviando solicitação de recuperação…');
+    try {
+      const redirect = new URL('recuperar-senha-v22.html', location.href).href;
+      await request('/auth/v1/recover?redirect_to=' + encodeURIComponent(redirect), 'POST', {email});
+      $('recover-form').hidden = true;
+      status('Solicitação recebida. Se esta conta estiver habilitada para recuperação, o Supabase enviará um e-mail. Confira a caixa de entrada e o spam.', 'ok');
+    } catch (err) { status(errorMessage(err), 'err'); }
+    finally { disabled(false); }
+  });
+  $('reset-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!recoveryToken) { status('Link de recuperação inválido. Solicite outro.', 'err');return; }
+    const pass = $('new-pass').value;
+    if (pass.length < 12) { status('Escolha uma senha com pelo menos 12 caracteres.', 'err');return; }
+    if (pass !== $('confirm-pass').value) { status('As duas senhas não coincidem.', 'err');return; }
+    disabled(true);status('Salvando a nova senha…');
+    try {
+      await request('/auth/v1/user', 'PUT', {password:pass}, recoveryToken);
+      recoveryToken = '';
+      $('new-pass').value = '';
+      $('confirm-pass').value = '';
+      $('reset-form').hidden = true;
+      status('Senha alterada com sucesso! Agora abra a página de teste da v2.2 e entre com a nova senha.', 'ok');
+    } catch (err) { status(errorMessage(err), 'err'); }
+    finally { disabled(false); }
+  });
+})();
+</script>
+</body>
+</html>
