@@ -363,6 +363,7 @@
         const { store, id } = local.get(key) ||
           (remote.has(key) ? { store: remote.get(key).store, id: remote.get(key).record_id } :
           { store: key.split('\u0000')[0], id: key.split('\u0000')[1] });
+        if (store === '__settings' && id !== 'global') continue;
         if (!STORES.includes(store) && store !== '__settings') continue;
         const l = local.get(key);
         const state = meta.get(key);
