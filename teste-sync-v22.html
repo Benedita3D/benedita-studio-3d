@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Benedita v2.2 — Teste de conexão protegido</title>
+<style>
+:root{font:16px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1d2e44;background:#eef2f6}
+*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:680px;margin:0 auto}
+header{background:#152439;border-radius:18px;padding:22px 22px 21px;color:#fff;display:flex;gap:15px;align-items:center}
+header img{width:74px;height:74px;object-fit:cover;border-radius:17px}h1{font-size:1.35rem;margin:0 0 5px}h2{font-size:1.15rem;margin:0 0 11px}
+p{margin:5px 0 13px}.subtitle{font-size:.89rem;color:#d3dee9}.intro{font-size:.9rem;margin:13px 1px;color:#486078}
+section{background:#fff;border:1px solid #dbe4ec;border-radius:16px;padding:20px;margin:13px 0;box-shadow:0 2px 8px #1929400b}
+label{display:block;font-weight:650;margin:13px 0 5px;font-size:.91rem}input{width:100%;min-height:45px;border:1px solid #bdcbd7;border-radius:9px;padding:10px;font:inherit;color:#1d2e44}
+input:focus,button:focus-visible{outline:3px solid #e6b869;outline-offset:2px}
+button{font:inherit;font-weight:700;border:0;border-radius:9px;cursor:pointer;padding:11px 15px;min-height:44px}
+.primary{background:#162c45;color:white}.secondary{background:#e8eef5;color:#17314b}.warn{background:#f8ebcf;color:#755322}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.actions button{flex:1 1 145px}
+.muted{font-size:.84rem;color:#5d6d7f}.state{margin:14px 0 0;padding:10px 12px;border-radius:9px;white-space:pre-wrap;background:#eaf0f6;font-size:.9rem}
+.ok{background:#e1f4ed;color:#144a36}.err{background:#fae8e6;color:#81281f}
+.output{background:#eff5fa;border-radius:9px;padding:15px;min-height:62px;overflow-wrap:anywhere;font-weight:700}
+footer{font-size:.83rem;color:#5f6e7d;padding:5px 8px 18px;text-align:center}
+[hidden]{display:none!important}
+</style>
+<script src="./sync-config-v22.js"></script>
+</head>
+<body>
+<main>
+<header><img src="./icon-192.png" alt="Mascote Benedita"><div><h1>Benedita Studio 3D</h1><div class="subtitle">Teste de conexão v2.2 · ambiente isolado</div></div></header>
+<p class="intro"><strong>Esta página não altera a Central v2.1.</strong> Ela não abre os cadastros locais nem muda os arquivos do aplicativo. Usaremos somente uma mensagem fictícia para testar a nuvem.</p>
+<section>
+<h2>1. Entrar na conta de teste</h2>
+<p class="muted">Use a mesma conta autorizada que você criou no Supabase. A senha é enviada diretamente ao Supabase por conexão HTTPS e não é armazenada nesta página.</p>
+<form id="login">
+<label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required>
+<div class="actions"><button class="primary" type="submit" id="connect">Entrar</button></div>
+</form>
+<div class="actions"><button class="secondary" type="button" id="logout" hidden>Sair da conta</button></div>
+<div class="state" id="status" role="status">Conferindo configuração…</div>
+</section>
+<section id="testing" hidden>
+<h2>2. Enviar e receber uma mensagem</h2>
+<p class="muted">Primeiro envie uma mensagem fictícia pelo Acer. Depois abra esta mesma página no celular, entre com a mesma conta e clique em <strong>Buscar mensagem</strong>.</p>
+<label for="note">Mensagem de teste</label><input id="note" value="Teste Acer v2.2" maxlength="150" autocomplete="off">
+<div class="actions"><button class="primary" id="send" type="button">Enviar mensagem</button><button class="secondary" id="receive" type="button">Buscar mensagem</button></div>
+<label>Última mensagem recebida da nuvem</label>
+<div class="output" id="received">Nenhuma leitura feita.</div>
+<p class="muted">Somente o registro isolado de teste será utilizado. Se dois aparelhos tentarem alterar o registro ao mesmo tempo, uma proteção avisará sobre o conflito.</p>
+</section>
+<footer>Teste técnico Benedita v2.2 · Nenhum cadastro de cliente, produto, pedido ou arquivo STL/3MF é modificado nesta página.</footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const config = window.BENEDITA_SYNC_CONFIG || {};
+  const base = String(config.supabaseUrl || '').trim().replace(/\/+$/,'');
+  const key = String(config.publishableKey || '').trim();
+  const recordId = 'teste_conexao_v22_20261122';
+  const recordStore = '__settings';
+  let token = '', revision = 0, busy = false;
+  const configOK = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(base)
+    && (key.startsWith('sb_publishable_') || key.startsWith('eyJ'))
+    && !key.includes('COLE_AQUI_');
+  function report(msg, kind=''){
+    const el=$('status');el.textContent=msg;el.className='state '+kind;
+  }
+  async function call(path, opts={}) {
+    const headers = {'apikey':key, ...(opts.body ? {'Content-Type':'application/json'} : {}), ...opts.headers};
+    if (token) headers.Authorization='Bearer '+token;
+    const response=await fetch(base+path,{...opts,headers,cache:'no-store'});
+    const body=await response.text();let data;
+    try{data=JSON.parse(body)}catch{data={message:body.slice(0,240)}}
+    if(!response.ok){
+      // Mensagem curta, sem reproduzir a resposta inteira (que poderia conter detalhes internos).
+      const detail=typeof data?.message==='string'?data.message:typeof data?.error_description==='string'?data.error_description:'';
+      throw new Error(`HTTP ${response.status}${detail?': '+detail.slice(0,180):''}`);
+    }
+    return data;
+  }
+  async function readRecord(){
+    const filter=`?select=revision,payload,deleted_at&store=eq.${recordStore}&record_id=eq.${recordId}&limit=1`;
+    const items=await call('/rest/v1/benedita_sync_records'+filter);
+    const item=Array.isArray(items)?items[0]:null;
+    revision=Number(item?.revision)||0;
+    const value=item && !item.deleted_at && item.payload?String(item.payload.message||''):'';
+    $('received').textContent=value || 'Ainda não há mensagem gravada.';
+    return value;
+  }
+  function errorText(err){
+    const m=String(err?.message||'Erro desconhecido');
+    if (/Failed to fetch|NetworkError|network error/i.test(m)) return 'Falha na conexão. Confira internet, endereço do Supabase e acesso à API.';
+    if (/400|invalid login credentials/i.test(m))return 'Não foi possível entrar. Confira o e-mail e a senha.';
+    if(/401|403/.test(m))return 'Acesso recusado. Confira login e permissões (RLS) no Supabase.';
+    if(/404/.test(m))return 'Recurso de sincronização não encontrado. Confira se o SQL da v2.2 foi executado.';
+    return m.slice(0,200);
+  }
+  async function safeRun(task){
+    if(busy)return;busy=true;
+    for (const b of document.querySelectorAll('button'))b.disabled=true;
+    try{await task()}catch(err){report(errorText(err),'err')}
+    finally{busy=false;for (const b of document.querySelectorAll('button'))b.disabled=false}
+  }
+  $('login').addEventListener('submit', e=>{
+    e.preventDefault();if(!configOK){report('Arquivo sync-config-v22.js não encontrado ou com dados inválidos. Verifique as duas linhas e publique o arquivo no mesmo diretório da página.','err');return;}
+    safeRun(async()=>{
+      report('Conectando ao Supabase…');
+      const payload=JSON.stringify({email:$('email').value.trim(),password:$('password').value});
+      const response=await call('/auth/v1/token?grant_type=password',{method:'POST',body:payload});
+      token=String(response?.access_token||'');$('password').value='';
+      if(!token)throw Error('Autenticação não retornou uma sessão.');
+      $('login').hidden=true;$('testing').hidden=false;$('logout').hidden=false;
+      await readRecord();
+      report('Conectado com sucesso. Você pode enviar ou buscar a mensagem de teste.','ok');
+    });
+  });
+  $('send').addEventListener('click',()=>safeRun(async()=>{
+    if(!token)throw Error('Entre na sua conta antes.');
+    const note=$('note').value.trim();if(!note)throw Error('Digite uma mensagem de teste.');
+    report('Enviando mensagem…');
+    // Lê a revisão mais recente antes de escrever, sem sobrescrever versões antigas em silêncio.
+    await readRecord();
+    const data=JSON.stringify({message:note,source:'pagina-teste-v22',updatedAt:new Date().toISOString()});
+    const bytes=new TextEncoder().encode(data);
+    const digest=await crypto.subtle.digest('SHA-256',bytes);
+    const fingerprint=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    const result=await call('/rest/v1/rpc/benedita_sync_write',{
+      method:'POST',
+      body:JSON.stringify({p_store:recordStore,p_record_id:recordId,p_payload:JSON.parse(data),p_fingerprint:fingerprint,p_deleted:false,p_expected_revision:revision})
+    });
+    if(result?.ok!==true){
+      report('Foi detectada uma alteração feita em outro aparelho. Clique em Buscar mensagem para atualizar antes de tentar novamente.','err');
+      return;
+    }
+    await readRecord();
+    report('Mensagem salva na nuvem com sucesso. Agora faça a leitura no outro aparelho.','ok');
+  }));
+  $('receive').addEventListener('click',()=>safeRun(async()=>{
+    if(!token)throw Error('Entre na sua conta antes.');
+    report('Buscando mensagem da nuvem…');
+    await readRecord();report('Leitura concluída. Confira a mensagem exibida acima.','ok');
+  }));
+  $('logout').addEventListener('click',()=>{
+    token=''; revision=0;$('testing').hidden=true;$('login').hidden=false;$('logout').hidden=true;
+    $('email').value='';$('password').value='';$('received').textContent='Nenhuma leitura feita.';
+    report('Sessão encerrada nesta página. Nenhum dado de login foi salvo.');
+  });
+  if(configOK)report('Configuração identificada. Digite sua conta de teste para continuar.');
+  else report('Ainda falta publicar ou corrigir o arquivo sync-config-v22.js ao lado desta página.','err');
+})();
+</script>
+</body>
+</html>
