@@ -1,8 +1,9 @@
 // Benedita Studio 3D — PWA v2.1
 // Conteúdo estático; dados pessoais ficam no IndexedDB do navegador.
-const CACHE = 'benedita-central-v21';
+// Revisão de cache para atualizar os ícones aprovados do mascote (novembro/2026).
+const CACHE = 'benedita-central-v21-mascote-20261122';
 const PREFIX = 'benedita-central-';
-const PRELOAD = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './mascote-benedita.webp'];
+const PRELOAD = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-192.png?v=mascote-20261122', './icon-512.png?v=mascote-20261122', './mascote-benedita.webp'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PRELOAD)).then(() => self.skipWaiting()));
